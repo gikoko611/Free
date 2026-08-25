@@ -477,7 +477,7 @@ def run(file):
 
 def repl():
 
-    print("GI Language v0.8")
+    print("GI Language v1.6")
     print("Type exit to quit")
 
     while True:

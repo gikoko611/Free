@@ -1,6 +1,5 @@
-function add(a,b)
-say "running function"
-return 10
-end
+x = 10
+y = 20
 
-add(1,2)
+say x
+say y
