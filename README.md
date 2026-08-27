@@ -21,4 +21,4 @@ GI Language is a simple scripting language designed to be easy to learn and run 
 Run GI:
 
 ```bash
-python gi.py
+gi
