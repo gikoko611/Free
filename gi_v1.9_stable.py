@@ -44,6 +44,12 @@ def get_value(v):
         return variables[v]
 
 
+    # RANGE FUNCTION
+    if v.startswith("range(") and v.endswith(")"):
+        inside = v[6:-1].strip()
+        return range(int(get_value(inside)))
+
+
     # DICTIONARY LITERAL
 
     if v.startswith("{") and v.endswith("}"):

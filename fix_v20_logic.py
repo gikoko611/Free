@@ -1,6 +1,6 @@
 from pathlib import Path
 
-p = Path("gi_v1.9.py")
+p = Path("gi.py")
 s = p.read_text()
 
 old = '''def check_condition(c):
