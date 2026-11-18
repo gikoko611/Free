@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>မြန်မာ့อน태အိမ် - Traditional Myanmar Stilt House</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #1a1a2e; font-family: 'Segoe UI', sans-serif; }
+    #canvas { display: block; }
+    .info-panel {
+      position: fixed; top: 20px; left: 20px; right: 20px;
+      background: rgba(26, 26, 46, 0.9); border-radius: 12px;
+      padding: 16px 24px; color: #f0e6d2; z-index: 100;
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      backdrop-filter: blur(10px);
+    }
+    .info-panel h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 4px; color: #d4af37; }
+    .info-panel p { font-size: 0.9rem; opacity: 0.85; line-height: 1.5; }
+    .controls-hint {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(26, 26, 46, 0.9); padding: 12px 24px; border-radius: 8px;
+      color: #f0e6d2; font-size: 0.85rem; opacity: 0.8;
+      border: 1px solid rgba(212, 175, 55, 0.2);
+      display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;
+    }
+    .controls-hint kbd {
+      background: rgba(212, 175, 55, 0.2); padding: 2px 8px; border-radius: 4px;
+      font-family: monospace; color: #d4af37;
+    }
+    .legend {
+      position: fixed; right: 20px; top: 100px; background: rgba(26, 26, 46, 0.9);
+      padding: 16px; border-radius: 10px; color: #f0e6d2; font-size: 0.75rem;
+      border: 1px solid rgba(212, 175, 55, 0.2); line-height: 1.8;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+    .legend-color { width: 14px; height: 14px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="info-panel">
+    <h1>မြန်မာ့อน태 ရ datetime.now().strftime("%Y-%m-%d") တဲအိမ်</h1>
+    <p>ဝါးနှင့်သာတ္တာနဲ့ဆောက်ထားတဲ့agyiတရုတ် သော မြန်မာ့อน태အိမ်ပုံစံတစ်ခု။ ဤအိမ်သည် တိုးတက်ရာတွင်ရှိသည့် မိုးရေများနှင့် မိတ္တွေကyclerဖ်က တီထွင်အိမ်ပေါ်သို့ တက်ရောက်ပေးရန် တဲတ 비슷한 တို့ဖြင့် မြင့်မားစေထားပါသည်။</p>
+  </div>
+  <div class="controls-hint">
+    <span><kbd>Mouse Drag</kbd> Orbit</span>
+    <span><kbd>Scroll</kbd> Zoom</span>
+    <span><kbd>Right Drag</kbd> Pan</span>
+    <span><kbd>Space</kbd> Auto-rotate</span>
+  </div>
+  <div class="legend" id="legend"></div>
+  <canvas id="canvas"></canvas>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { ToneMappingPass } from 'three/addons/postprocessing/ToneMappingPass.js';
+
+    // ── Scene Setup ──────────────────────────────────────────────
+    const canvas = document.getElementById('canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d0d1a);
+    scene.fog = new THREE.FogExp2(0x0d0d1a, 0.008);
+
+    // ── Camera ───────────────────────────────────────────────────
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.set(18, 12, 18);
+
+    // ── Controls ─────────────────────────────────────────────────
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 8;
+    controls.maxDistance = 60;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    controls.target.set(0, 5.5, 0);
+    controls.autoRotate = false;
+    controls.autoRotateSpeed = 0.3;
+
+    // ── Post-processing ──────────────────────────────────────────
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.15, 0.4, 0.85
+    );
+    composer.addPass(bloomPass);
+    composer.addPass(new ToneMappingPass());
+
+    // ── Materials ────────────────────────────────────────────────
+    const materials = {
+      teakPost: new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.85, metalness: 0.05, envMapIntensity: 0.3 }),
+      bamboo: new THREE.MeshStandardMaterial({ color: 0x8f7a4a, roughness: 0.7, metalness: 0.05, envMapIntensity: 0.2 }),
+      bambooDark: new THREE.MeshStandardMaterial({ color: 0x6b5835, roughness: 0.8, metalness: 0.03, envMapIntensity: 0.2 }),
+      floorWood: new THREE.MeshStandardMaterial({ color: 0x5d4328, roughness: 0.9, metalness: 0.02, envMapIntensity: 0.15 }),
+      thatch: new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.1 }),
+      thatchLight: new THREE.MeshStandardMaterial({ color: 0x5d4a35, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.1 }),
+      rope: new THREE.MeshStandardMaterial({ color: 0x3a2d1e, roughness: 0.9, metalness: 0.0, envMapIntensity: 0.1 }),
+      goldAccent: new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8, envMapIntensity: 1.0 }),
+      ground: new THREE.MeshStandardMaterial({ color: 0x2d251a, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.1 }),
+      stairWood: new THREE.MeshStandardMaterial({ color: 0x4a3422, roughness: 0.85, metalness: 0.03, envMapIntensity: 0.2 })
+    };
+
+    const legendData = [
+      { name: 'တီးထိုး (Teak Posts)', color: 0x3d2314 },
+      { name: 'ဝါးအရုပ်များ (Bamboo)', color: 0x8f7a4a },
+      { name: 'မှန်ကုန်ပြړه (Floor)', color: 0x5d4328 },
+      { name: 'သက်ပန်းထWnd (Thatch Roof)', color: 0x4a3728 },
+      { name: 'ကိုယ်တိုင်ဆင်ရ<body Myanmar> (Bindings)', color: 0x3a2d1e },
+      { name: 'ရှာ Myanmar (Gold Accents)', color: 0xd4af37 }
+    ];
+    const legendEl = document.getElementById('legend');
+    legendData.forEach(d => {
+      const div = document.createElement('div');
+      div.className = 'legend-item';
+      div.innerHTML = `<div class="legend-color" style="background:#${d.color.toString(16).padStart(6,'0')}"></div><span>${d.name}</span>`;
+      legendEl.appendChild(div);
+    });
+
+    // ── Helper Functions ─────────────────────────────────────────
+    function addShadow(mesh) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    function createCylinder(radiusTop, radiusBottom, height, radialSegments, material, position, rotation = [0,0,0]) {
+      const geom = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, radialSegments);
+      const mesh = new THREE.Mesh(geom, material);
+      mesh.position.set(...position);
+      mesh.rotation.set(...rotation);
+      return addShadow(mesh);
+    }
+
+    function createBox(w, h, d, material, position, rotation = [0,0,0]) {
+      const geom = new THREE.BoxGeometry(w, h, d);
+      const mesh = new THREE.Mesh(geom, material);
+      mesh.position.set(...position);
+      mesh.rotation.set(...rotation);
+      return addShadow(mesh);
+    }
+
+    function createCone(radius, height, segments, material, position, rotation = [0,0,0]) {
+      const geom = new THREE.ConeGeometry(radius, height, segments);
+      const mesh = new THREE.Mesh(geom, material);
+      mesh.position.set(...position);
+      mesh.rotation.set(...rotation);
+      return addShadow(mesh);
+    }
+
+    function createTorus(radius, tube, radialSeg, tubularSeg, material, position, rotation = [0,0,0]) {
+      const geom = new THREE.TorusGeometry(radius, tube, radialSeg, tubularSeg);
+      const mesh = new THREE.Mesh(geom, material);
+      mesh.position.set(...position);
+      mesh.rotation.set(...rotation);
+      return addShadow(mesh);
+    }
+
+    function createSphere(radius, wSeg, hSeg, material, position) {
+      const geom = new THREE.SphereGeometry(radius, wSeg, hSeg);
+      const mesh = new THREE.Mesh(geom, material);
+      mesh.position.set(...position);
+      return addShadow(mesh);
+    }
+
+    // ── Build House ──────────────────────────────────────────────
+    const houseGroup = new THREE.Group();
+    scene.add(houseGroup);
+
+    const HOUSE_W = 10;
+    const HOUSE_D = 8;
+    const HOUSE_H = 5.5;
+    const STILT_H = 3.2;
+    const FLOOR_THICK = 0.25;
+    const ROOF_H = 4.5;
+    const POST_R = 0.22;
+
+    // 1. STILT POSTS (Teak)
+    const postPositions = [
+      [-HOUSE_W/2, -HOUSE_D/2], [0, -HOUSE_D/2], [HOUSE_W/2, -HOUSE_D/2],
+      [-HOUSE_W/2, 0], [HOUSE_W/2, 0],
+      [-HOUSE_W/2, HOUSE_D/2], [0, HOUSE_D/2], [HOUSE_W/2, HOUSE_D/2]
+    ];
+    postPositions.forEach(([x, z]) => {
+      const post = createCylinder(POST_R * 1.1, POST_R, STILT_H + FLOOR_THICK, 8, materials.teakPost, [x, STILT_H/2, z]);
+      houseGroup.add(post);
+      const stone = createCylinder(POST_R * 1.5, POST_R * 1.6, 0.3, 8, new THREE.MeshStandardMaterial({color:0x4a453d, roughness:0.95}), [x, 0.15, z]);
+      houseGroup.add(stone);
+      const band = createCylinder(POST_R * 1.05, POST_R * 1.05, 0.08, 16, materials.goldAccent, [x, STILT_H + FLOOR_THICK + 0.04, z]);
+      houseGroup.add(band);
+    });
+
+    // Cross bracing
+    for (let i = 0; i < postPositions.length - 1; i++) {
+      const [x1, z1] = postPositions[i];
+      const [x2, z2] = postPositions[i + 1];
+      if (Math.abs(x1 - x2) < 0.1 || Math.abs(z1 - z2) < 0.1) {
+        const dx = x2 - x1, dz = z2 - z1;
+        const len = Math.sqrt(dx*dx + dz*dz);
+        const angle = Math.atan2(dz, dx);
+        const brace = createCylinder(0.06, 0.06, len, 6, materials.bamboo, [x1 + dx/2, STILT_H * 0.5, z1 + dz/2], [0, 0, angle - Math.PI/2]);
+        houseGroup.add(brace);
+      }
+    }
+
+    // Diagonal braces (X pattern)
+    const diagPairs = [
+      [[-HOUSE_W/2, -HOUSE_D/2], [0, 0]],
+      [[HOUSE_W/2, -HOUSE_D/2], [0, 0]],
+      [[-HOUSE_W/2, HOUSE_D/2], [0, 0]],
+      [[HOUSE_W/2, HOUSE_D/2], [0, 0]]
+    ];
+    diagPairs.forEach(([[x1, z1], [x2, z2]]) => {
+      const dx = x2 - x1, dz = z2 - z1;
+      const len = Math.sqrt(dx*dx + dz*dz + STILT_H*STILT_H);
+      const angleX = Math.atan2(STILT_H, Math.sqrt(dx*dx + dz*dz));
+      const angleY = Math.atan2(dz, dx);
+      const brace = createCylinder(0.05, 0.05, len, 6, materials.bambooDark, [x1 + dx/2, STILT_H/2, z1 + dz/2], [angleX, 0, angleY - Math.PI/2]);
+      houseGroup.add(brace);
+    });
+
+    // 2. FLOOR BEAMS
+    const beamPositions = [
+      { pos: [0, -HOUSE_D/2], rot: [0,0,0], size: [HOUSE_W, 0.18, 0.18] },
+      { pos: [0, 0], rot: [0,0,0], size: [HOUSE_W, 0.18, 0.18] },
+      { pos: [0, HOUSE_D/2], rot: [0,0,0], size: [HOUSE_W, 0.18, 0.18] },
+      { pos: [-HOUSE_W/2, 0], rot: [0,0,Math.PI/2], size: [HOUSE_D, 0.16, 0.16] },
+      { pos: [0, 0], rot: [0,0,Math.PI/2], size: [HOUSE_D, 0.16, 0.16] },
+      { pos: [HOUSE_W/2, 0], rot: [0,0,Math.PI/2], size: [HOUSE_D, 0.16, 0.16] },
+    ];
+    beamPositions.forEach(b => {
+      const beam = createBox(b.size[0], b.size[1], b.size[2], materials.teakPost, [b.pos[0], STILT_H + FLOOR_THICK/2 + b.size[1]/2, b.pos[1]], b.rot);
+      houseGroup.add(beam);
+    });
+
+    // 3. FLOOR PLANKS
+    const plankCount = 20;
+    const plankW = HOUSE_W / plankCount;
+    for (let i = 0; i < plankCount; i++) {
+      const x = -HOUSE_W/2 + (i + 0.5) * plankW;
+      const plank = createBox(plankW * 0.95, FLOOR_THICK, HOUSE_D - 0.2, materials.floorWood, [x, STILT_H + FLOOR_THICK/2, 0]);
+      houseGroup.add(plank);
+      if (i < plankCount - 1) {
+        const gap = createBox(0.01, 0.02, HOUSE_D - 0.2, new THREE.MeshStandardMaterial({color:0x1a1008}), [x + plankW/2, STILT_H + FLOOR_THICK + 0.01, 0]);
+        houseGroup.add(gap);
+      }
+    }
+
+    // Floor edge trim
+    const trimMat = materials.teakPost;
+    [createBox(HOUSE_W, 0.1, 0.08, trimMat, [0, STILT_H + FLOOR_THICK/2, -HOUSE_D/2 + 0.04]),
+     createBox(HOUSE_W, 0.1, 0.08, trimMat, [0, STILT_H + FLOOR_THICK/2, HOUSE_D/2 - 0.04]),
+     createBox(0.08, 0.1, HOUSE_D, trimMat, [-HOUSE_W/2 + 0.04, STILT_H + FLOOR_THICK/2, 0]),
+     createBox(0.08, 0.1, HOUSE_D, trimMat, [HOUSE_W/2 - 0.04, STILT_H + FLOOR_THICK/2, 0])].forEach(m => houseGroup.add(m));
+
+    // 4. WALLS - Bamboo woven panels
+    const wallH = HOUSE_H;
+    const wallPanelW = 1.2;
+    const panelCountW = Math.floor(HOUSE_W / wallPanelW);
+    const panelCountD = Math.floor(HOUSE_D / wallPanelW);
+
+    function createBambooWallPanel(width, height, isDoor = false, isWindow = false) {
+      const group = new THREE.Group();
+      const mat = isDoor ? materials.bambooDark : materials.bamboo;
+      const slatCount = Math.max(3, Math.floor(width / 0.1));
+      for (let i = 0; i < slatCount; i++) {
+        const x = -width/2 + (i + 0.5) * (width / slatCount);
+        const w = (width / slatCount) * 0.7;
+        const h = isWindow && Math.abs(x) < width * 0.3 ? height * 0.55 : height;
+        const yOffset = isWindow && Math.abs(x) < width * 0.3 ? height * 0.225 : 0;
+        const slat = createBox(w, h, 0.035, mat, [x, yOffset, 0]);
+        group.add(slat);
+      }
+      const ropeCount = 4;
+      for (let i = 0; i <= ropeCount; i++) {
+        const y = -height/2 + i * (height / ropeCount);
+        const rope = createBox(width * 0.95, 0.02, 0.04, materials.rope, [0, y, 0.02]);
+        group.add(rope);
+      }
+      if (isWindow) {
+        const frameMat = materials.teakPost;
+        const fw = width * 0.7, fh = height * 0.5;
+        [createBox(fw, 0.06, 0.06, frameMat, [0, height/2 - fh/2 + 0.03, 0.04]),
+         createBox(fw, 0.06, 0.06, frameMat, [0, -height/2 + fh/2 - 0.03, 0.04]),
+         createBox(0.06, fh, 0.06, frameMat, [-fw/2 + 0.03, 0, 0.04]),
+         createBox(0.06, fh, 0.06, frameMat, [fw/2 - 0.03, 0, 0.04])].forEach(m => group.add(m));
+        const shutter = createBox(fw * 0.48, fh * 0.95, 0.05, materials.bambooDark, [fw/2 * 0.76, 0, 0.08], [0, -0.4, 0]);
+        group.add(shutter);
+      }
+      if (isDoor) {
+        const frameMat = materials.teakPost;
+        const dw = width * 0.8, dh = height * 0.9;
+        [createBox(dw, 0.08, 0.06, frameMat, [0, -height/2 + dh/2, 0.05]),
+         createBox(0.08, dh, 0.06, frameMat, [-dw/2 + 0.04, -height/2 + dh/2, 0.05]),
+         createBox(0.08, dh, 0.06, frameMat, [dw/2 - 0.04, -height/2 + dh/2, 0.05])].forEach(m => group.add(m));
+      }
+      return group;
+    }
+
+    // Front wall (with door)
+    for (let i = 0; i < panelCountW; i++) {
+      const x = -HOUSE_W/2 + (i + 0.5) * wallPanelW;
+      const isDoor = i === Math.floor(panelCountW/2);
+      const panel = createBambooWallPanel(wallPanelW * 0.95, wallH, isDoor, !isDoor);
+      panel.position.set(x, STILT_H + FLOOR_THICK + wallH/2, -HOUSE_D/2 + 0.15);
+      houseGroup.add(panel);
+    }
+    // Back wall (with window)
+    for (let i = 0; i < panelCountW; i++) {
+      const x = -HOUSE_W/2 + (i + 0.5) * wallPanelW;
+      const panel = createBambooWallPanel(wallPanelW * 0.95, wallH, false, true);
+      panel.position.set(x, STILT_H + FLOOR_THICK + wallH/2, HOUSE_D/2 - 0.15);
+      panel.rotation.y = Math.PI;
+      houseGroup.add(panel);
+    }
+    // Side walls
+    for (let side = -1; side <= 1; side += 2) {
+      for (let i = 0; i < panelCountD; i++) {
+        const z = -HOUSE_D/2 + (i + 0.5) * wallPanelW;
+        const panel = createBambooWallPanel(wallPanelW * 0.95, wallH, false, i === Math.floor(panelCountD/2));
+        panel.position.set(side * (HOUSE_W/2 - 0.15), STILT_H + FLOOR_THICK + wallH/2, z);
+        panel.rotation.y = side * -Math.PI/2;
+        houseGroup.add(panel);
+      }
+    }
+
+    // 5. ROOF - Traditional tiered thatched roof
+    const roofGroup = new THREE.Group();
+    houseGroup.add(roofGroup);
+
+    const roofBaseY = STILT_H + FLOOR_THICK + wallH;
+    const ridge = createBox(HOUSE_W + 1.5, 0.15, 0.2, materials.teakPost, [0, roofBaseY + ROOF_H * 0.85, 0]);
+    houseGroup.add(ridge);
+    const rafterCount = 14;
+    for (let i = 0; i <= rafterCount; i++) {
+      const x = -HOUSE_W/2 - 0.5 + i * (HOUSE_W + 1) / rafterCount;
+      const rafterLen = (HOUSE_D + 1.8) / 2 / Math.cos(Math.atan(ROOF_H * 0.7 / ((HOUSE_D + 1.8)/2)));
+      const angle = Math.atan(ROOF_H * 0.7 / ((HOUSE_D + 1.8)/2));
+      const rafter = createBox(0.08, 0.1, rafterLen, materials.bambooDark, [x, roofBaseY + 0.1, 0], [-angle, 0, 0]);
+      houseGroup.add(rafter);
+      const rafter2 = createBox(0.08, 0.1, rafterLen, materials.bambooDark, [x, roofBaseY + 0.1, 0], [angle, 0, 0]);
+      houseGroup.add(rafter2);
+    }
+
+    const thatchLayers = 5;
+    for (let layer = 0; layer < thatchLayers; layer++) {
+      const layerY = roofBaseY + 0.3 + layer * 0.7;
+      const layerScale = 1 - layer * 0.08;
+      const rowCount = 4;
+      for (let row = 0; row < rowCount; row++) {
+        const z = -HOUSE_D/2 - 0.6 + row * (HOUSE_D + 1.2) / (rowCount - 1);
+        const thatchRow = new THREE.Group();
+        const segmentCount = 8;
+        for (let seg = 0; seg < segmentCount; seg++) {
+          const x = -HOUSE_W/2 - 0.4 + seg * (HOUSE_W + 0.8) / segmentCount;
+          const w = (HOUSE_W + 0.8) / segmentCount * 0.95;
+          const thatchPiece = createBox(w * layerScale, 0.15, 0.45, layer % 2 === 0 ? materials.thatch : materials.thatchLight, [x, layerY, z]);
+          thatchRow.add(thatchPiece);
+        }
+        thatchRow.rotation.x = -Math.atan(ROOF_H * 0.7 / ((HOUSE_D + 1.8)/2)) * 0.95;
+        thatchRow.position.y = layer * 0.15;
+        roofGroup.add(thatchRow);
+        const thatchRow2 = thatchRow.clone();
+        thatchRow2.rotation.x = Math.atan(ROOF_H * 0.7 / ((HOUSE_D + 1.8)/2)) * 0.95;
+        thatchRow2.position.y = layer * 0.15;
+        roofGroup.add(thatchRow2);
+      }
+    }
+
+    const ridgeCap = createCylinder(0.12, 0.12, HOUSE_W + 1.5, 8, materials.thatch, [0, roofBaseY + ROOF_H * 0.85 + 0.15, 0], [0, 0, Math.PI/2]);
+    houseGroup.add(ridgeCap);
+    [-1, 1].forEach(side => {
+      const finialBase = createCone(0.18, 0.5, 8, materials.goldAccent, [side * (HOUSE_W/2 + 0.8), roofBaseY + ROOF_H * 0.85 + 0.4, 0]);
+      houseGroup.add(finialBase);
+      const finialTop = createSphere(0.08, 12, 8, materials.goldAccent, [side * (HOUSE_W/2 + 0.8), roofBaseY + ROOF_H * 0.85 + 0.7, 0]);
+      houseGroup.add(finialTop);
+    });
+
+    // 6. STAIRS / LADDER
+    const stairGroup = new THREE.Group();
+    houseGroup.add(stairGroup);
+    const stairW = 1.2;
+    const stairCount = 8;
+    const stairTotalH = STILT_H + FLOOR_THICK;
+    const stairAngle = Math.atan2(stairTotalH, 2.5);
+    for (let i = 0; i < stairCount; i++) {
+      const stepH = stairTotalH / stairCount;
+      const stepD = 2.5 / stairCount;
+      const y = i * stepH + stepH/2;
+      const z = -HOUSE_D/2 - 0.3 - i * stepD;
+      const step = createBox(stairW, 0.12, stepD * 0.9, materials.stairWood, [0, y, z], [-stairAngle * 0.1, 0, 0]);
+      stairGroup.add(step);
+    }
+    const railLen = Math.sqrt(stairTotalH*stairTotalH + 2.5*2.5);
+    [-1, 1].forEach(side => {
+      const rail = createCylinder(0.06, 0.06, railLen, 6, materials.bamboo, [side * (stairW/2 + 0.08), stairTotalH/2, -HOUSE_D/2 - 1.25 - 0.3], [stairAngle, 0, 0]);
+      stairGroup.add(rail);
+    });
+
+    // 7. DECORATIVE ELEMENTS
+    // Hanging lanterns
+    const lanternPositions = [
+      [-HOUSE_W/3, -HOUSE_D/2 + 0.3], [HOUSE_W/3, -HOUSE_D/2 + 0.3],
+      [-HOUSE_W/3, HOUSE_D/2 - 0.3], [HOUSE_W/3, HOUSE_D/2 - 0.3],
+      [-HOUSE_W/2 + 0.3, -HOUSE_D/3], [-HOUSE_W/2 + 0.3, HOUSE_D/3],
+      [HOUSE_W/2 - 0.3, -HOUSE_D/3], [HOUSE_W/2 - 0.3, HOUSE_D/3]
+    ];
+    lanternPositions.forEach(([x, z]) => {
+      const lanternGroup = new THREE.Group();
+      const chain = createCylinder(0.015, 0.015, 0.8, 4, materials.goldAccent, [x, roofBaseY - 0.2, z]);
+      lanternGroup.add(chain);
+      const body = createCylinder(0.15, 0.12, 0.35, 12, new THREE.MeshStandardMaterial({
+        color: 0x8b1515, roughness: 0.3, metalness: 0.2, emissive: 0x8b1515, emissiveIntensity: 0.3
+      }), [x, roofBaseY - 0.6, z]);
+      lanternGroup.add(body);
+      const light = new THREE.PointLight(0xffaa44, 0.8, 4);
+      light.position.set(x, roofBaseY - 0.6, z);
+      light.castShadow = true;
+      lanternGroup.add(light);
+      const top = createCone(0.1, 0.15, 8, materials.goldAccent, [x, roofBaseY - 0.4, z]);
+      lanternGroup.add(top);
+      houseGroup.add(lanternGroup);
+    });
+
+    // Prayer flag poles
+    [-1, 1].forEach(sx => {
+      [-1, 1].forEach(sz => {
+        const pole = createCylinder(0.04, 0.05, 2.5, 6, materials.bamboo, [sx * (HOUSE_W/2 + 0.2), roofBaseY + ROOF_H * 0.85 + 1.2, sz * (HOUSE_D/2 + 0.2)]);
+        houseGroup.add(pole);
+        for (let f = 0; f < 3; f++) {
+          const flagY = roofBaseY + ROOF_H * 0.85 + 2.3 - f * 0.5;
+          const flag = createBox(0.6, 0.35, 0.01, new THREE.MeshStandardMaterial({
+            color: [0xff4444, 0xffff44, 0x44ff44, 0x4444ff, 0xff44ff][f % 5],
+            side: THREE.DoubleSide, roughness: 0.9
+          }), [sx * (HOUSE_W/2 + 0.5), flagY, sz * (HOUSE_D/2 + 0.2)], [0, sx * 0.3, 0]);
+          houseGroup.add(flag);
+        }
+      });
+    });
+
+    // 8. GROUND PLANE
+    const groundGeo = new THREE.CircleGeometry(50, 64);
+    const groundMesh = new THREE.Mesh(groundGeo, materials.ground);
+    groundMesh.rotation.x = -Math.PI/2;
+    groundMesh.position.y = 0;
+    groundMesh.receiveShadow = true;
+    scene.add(groundMesh);
+
+    // Grass patches
+    const grassGeo = new THREE.ConeGeometry(0.03, 0.15, 3);
+    const grassMat = new THREE.MeshStandardMaterial({color: 0x2d4a1a, roughness: 0.95});
+    const grassCount = 2000;
+    const grassMesh = new THREE.InstancedMesh(grassGeo, grassMat, grassCount);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < grassCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = 6 + Math.random() * 44;
+      const x = Math.cos(angle) * r;
+      const z = Math.sin(angle) * r;
+      dummy.position.set(x, 0.075, z);
+      dummy.rotation.y = Math.random() * Math.PI * 2;
+      dummy.scale.setScalar(0.8 + Math.random() * 0.6);
+      dummy.updateMatrix();
+      grassMesh.setMatrixAt(i, dummy.matrix);
+    }
+    grassMesh.instanceMatrix.needsUpdate = true;
+    scene.add(grassMesh);
+
+    // Trees
+    function createTree(x, z, scale = 1) {
+      const tree = new THREE.Group();
+      const trunk = createCylinder(0.25 * scale, 0.4 * scale, 3 * scale, 6, materials.teakPost, [x, 1.5 * scale, z]);
+      tree.add(trunk);
+      for (let i = 0; i < 4; i++) {
+        const foliage = createCone(1.2 * scale - i * 0.2 * scale, 1.5 * scale, 8, new THREE.MeshStandardMaterial({
+          color: 0x1b4d1b, roughness: 0.95, envMapIntensity: 0.1
+        }), [x, 3 * scale + i * 0.9 * scale, z]);
+        tree.add(foliage);
+      }
+      return tree;
+    }
+    [createTree(-18, -15, 1.2), createTree(20, -12, 0.9), createTree(-15, 18, 1.1), createTree(18, 16, 1.3), createTree(0, -25, 1.5), createTree(-25, 5, 1)].forEach(t => scene.add(t));
+
+    // ── Lighting ─────────────────────────────────────────────────
+    const sunLight = new THREE.DirectionalLight(0xfff8e7, 2.5);
+    sunLight.position.set(20, 30, 15);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.near = 0.1;
+    sunLight.shadow.camera.far = 80;
+    sunLight.shadow.camera.left = -25;
+    sunLight.shadow.camera.right = 25;
+    sunLight.shadow.camera.top = 25;
+    sunLight.shadow.camera.bottom = -25;
+    sunLight.shadow.bias = -0.0005;
+    sunLight.shadow.normalBias = 0.02;
+    scene.add(sunLight);
+
+    const fillLight = new THREE.DirectionalLight(0x88aaff, 0.6);
+    fillLight.position.set(-15, 10, -10);
+    scene.add(fillLight);
+
+    const ambient = new THREE.AmbientLight(0x404060, 0.8);
+    scene.add(ambient);
+
+    const hemiLight = new THREE.HemisphereLight(0xffeeb8, 0x1a1a2e, 0.5);
+    scene.add(hemiLight);
+
+    const accentPositions = [
+      [0, STILT_H + FLOOR_THICK + 0.5, -HOUSE_D/2 - 1.5],
+      [0, STILT_H + FLOOR_THICK + 0.5, HOUSE_D/2 + 1.5],
+      [-HOUSE_W/2 - 1.5, STILT_H + FLOOR_THICK + 0.5, 0],
+      [HOUSE_W/2 + 1.5, STILT_H + FLOOR_THICK + 0.5, 0]
+    ];
+    accentPositions.forEach(([x, y, z]) => {
+      const light = new THREE.PointLight(0xffd480, 0.5, 8);
+      light.position.set(x, y, z);
+      light.castShadow = true;
+      scene.add(light);
+    });
+
+    const interiorLight = new THREE.PointLight(0xffaa44, 0.4, 12);
+    interiorLight.position.set(0, STILT_H + FLOOR_THICK + wallH/2, 0);
+    scene.add(interiorLight);
+
+    // ── Sky / Environment ────────────────────────────────────────
+    const skyGeo = new THREE.SphereGeometry(100, 32, 16);
+    const skyMat = new THREE.MeshBasicMaterial({ color: 0x0d1020, side: THREE.BackSide, fog: false });
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(sky);
+
+    // Stars
+    const starGeo = new THREE.BufferGeometry();
+    const starCount = 2000;
+    const starPositions = new Float32Array(starCount * 3);
+    const starSizes = new Float32Array(starCount);
+    for (let i = 0; i < starCount; i++) {
+      const r = 90 + Math.random() * 10;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      starPositions[i*3] = r * Math.sin(phi) * Math.cos(theta);
+      starPositions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+      starPositions[i*3+2] = r * Math.cos(phi);
+      starSizes[i] = Math.random() * 1.5 + 0.5;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    starGeo.setAttribute('size', new THREE.BufferAttribute(starSizes, 1));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffee, size: 1, transparent: true, opacity: 0.7, sizeAttenuation: true });
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    // ── Animation / Interaction ──────────────────────────────────
+    let autoRotate = false;
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        autoRotate = !autoRotate;
+        controls.autoRotate = autoRotate;
+      }
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      houseGroup.traverse(obj => {
+        if (obj.isPointLight && obj.intensity > 0.5 && obj.intensity < 2) {
+          obj.intensity = 0.8 + Math.sin(elapsed * 1.5 + obj.position.x) * 0.15;
+        }
+      });
+
+      const starSizesArray = starGeo.attributes.size.array;
+      for (let i = 0; i < starCount; i++) {
+        starSizesArray[i] = Math.sin(elapsed * 0.5 + i) * 0.3 + 1;
+      }
+      starGeo.attributes.size.needsUpdate = true;
+      stars.rotation.y += 0.00002;
+
+      controls.update();
+      composer.render(delta);
+    }
+    animate();
+
+    // ── Resize ───────────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+      bloomPass.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    controls.target.set(0, STILT_H + FLOOR_THICK + wallH/2, 0);
+    controls.update();
+  </script>
+</body>
+</html>
